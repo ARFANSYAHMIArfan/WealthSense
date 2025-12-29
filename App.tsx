@@ -20,7 +20,10 @@ import {
   Download,
   Upload,
   Database,
-  Trash2
+  Trash2,
+  Lock,
+  Unlock,
+  Key
 } from 'lucide-react';
 import { 
   BarChart, 
@@ -40,7 +43,7 @@ import AccountCard from './components/AccountCard';
 import TransactionList from './components/TransactionList';
 import AddTransactionModal from './components/AddTransactionModal';
 
-type AppTab = 'Dashboard' | 'Bills' | 'Goals' | 'Recurring' | 'Backup';
+type AppTab = 'Dashboard' | 'Bills' | 'Goals' | 'Recurring' | 'Settings';
 
 const App: React.FC = () => {
   const [accounts, setAccounts] = useState<Account[]>(INITIAL_ACCOUNTS);
@@ -49,12 +52,34 @@ const App: React.FC = () => {
   const [recurring, setRecurring] = useState<RecurringTransaction[]>(INITIAL_RECURRING);
   const [categoryGoals, setCategoryGoals] = useState<CategoryGoal[]>(INITIAL_CATEGORY_GOALS);
   const [savingsGoals, setSavingsGoals] = useState<SavingsGoal[]>(INITIAL_SAVINGS_GOALS);
+  const [pin, setPin] = useState<string | null>(null);
+  const [isLocked, setIsLocked] = useState<boolean>(false);
+  const [unlockInput, setUnlockInput] = useState<string>('');
   
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<AppTab>('Dashboard');
   
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Load initial lock state from localStorage or initial state
+  useEffect(() => {
+    // Only lock if a PIN exists and it's the initial load
+    const storedPin = localStorage.getItem('ws_pin');
+    if (storedPin) {
+      setPin(storedPin);
+      setIsLocked(true);
+    }
+  }, []);
+
+  // Update persistence whenever pin changes
+  useEffect(() => {
+    if (pin) {
+      localStorage.setItem('ws_pin', pin);
+    } else {
+      localStorage.removeItem('ws_pin');
+    }
+  }, [pin]);
 
   const totalBalance = useMemo(() => {
     return accounts.reduce((sum, acc) => sum + acc.balance, 0);
@@ -117,7 +142,6 @@ const App: React.FC = () => {
     setBills(prev => prev.map(b => b.id === bill.id ? { ...b, isPaid: true } : b));
   };
 
-  // Backup and Restore Functionality
   const exportData = () => {
     const backupData = {
       accounts,
@@ -126,6 +150,7 @@ const App: React.FC = () => {
       recurring,
       categoryGoals,
       savingsGoals,
+      pin,
       exportedAt: new Date().toISOString()
     };
     
@@ -154,7 +179,6 @@ const App: React.FC = () => {
         const content = e.target?.result as string;
         const data = JSON.parse(content);
         
-        // Basic validation of keys
         if (data.accounts && data.transactions) {
           setAccounts(data.accounts);
           setTransactions(data.transactions);
@@ -162,9 +186,11 @@ const App: React.FC = () => {
           if (data.recurring) setRecurring(data.recurring);
           if (data.categoryGoals) setCategoryGoals(data.categoryGoals);
           if (data.savingsGoals) setSavingsGoals(data.savingsGoals);
+          if (data.pin !== undefined) setPin(data.pin);
           
           alert("Data restored successfully!");
           setActiveTab('Dashboard');
+          if (data.pin) setIsLocked(true);
         } else {
           alert("Invalid backup file format.");
         }
@@ -174,31 +200,82 @@ const App: React.FC = () => {
       }
     };
     reader.readAsText(file);
-    // Reset input so the same file can be uploaded again if needed
     event.target.value = '';
   };
 
   const resetToDefaults = () => {
-    if (window.confirm("Are you sure you want to reset all data to defaults? This cannot be undone unless you have a backup.")) {
+    if (window.confirm("Are you sure you want to clear all data and reset to defaults? This will also remove your security PIN.")) {
       setAccounts(INITIAL_ACCOUNTS);
       setTransactions(INITIAL_TRANSACTIONS);
       setBills(INITIAL_BILLS);
       setRecurring(INITIAL_RECURRING);
       setCategoryGoals(INITIAL_CATEGORY_GOALS);
       setSavingsGoals(INITIAL_SAVINGS_GOALS);
+      setPin(null);
+      setIsLocked(false);
       setSelectedAccountId(null);
       setActiveTab('Dashboard');
     }
   };
 
-  useEffect(() => {
-    const today = new Date().toISOString().split('T')[0];
-    recurring.forEach(rec => {
-      if (rec.active && rec.nextDate <= today) {
-        // Recurring logic placeholder
-      }
-    });
-  }, []);
+  const handleSetPin = () => {
+    const newPin = prompt("Enter new 4-digit numeric PIN (or leave empty to disable):");
+    if (newPin === null) return;
+    if (newPin === "") {
+      setPin(null);
+      setIsLocked(false);
+      alert("Security PIN disabled.");
+    } else if (/^\d{4}$/.test(newPin)) {
+      setPin(newPin);
+      // We don't lock immediately to allow user to continue settings.
+      // They can lock manually or it will lock on next session.
+      alert("Security PIN updated successfully. Your app is now protected.");
+    } else {
+      alert("PIN must be exactly 4 digits.");
+    }
+  };
+
+  const handleUnlock = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (unlockInput === pin) {
+      setIsLocked(false);
+      setUnlockInput('');
+    } else {
+      alert("Incorrect PIN");
+      setUnlockInput('');
+    }
+  };
+
+  if (isLocked) {
+    return (
+      <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
+        <div className="max-w-md w-full bg-slate-800 rounded-3xl p-8 shadow-2xl border border-slate-700 text-center">
+          <div className="w-20 h-20 bg-indigo-600 rounded-2xl flex items-center justify-center mx-auto mb-8 shadow-lg shadow-indigo-500/20">
+            <Lock className="w-10 h-10 text-white" />
+          </div>
+          <h1 className="text-2xl font-bold text-white mb-2">App Locked</h1>
+          <p className="text-slate-400 mb-8">Please enter your 4-digit PIN to access WealthSense.</p>
+          <form onSubmit={handleUnlock} className="space-y-6">
+            <input 
+              type="password" 
+              maxLength={4}
+              autoFocus
+              value={unlockInput}
+              onChange={(e) => setUnlockInput(e.target.value.replace(/\D/g, ''))}
+              className="w-full text-center text-4xl tracking-[1.5rem] font-bold bg-slate-900 border border-slate-700 rounded-2xl p-6 text-white focus:ring-2 focus:ring-indigo-500 focus:outline-none placeholder:text-slate-700"
+              placeholder="••••"
+            />
+            <button 
+              type="submit"
+              className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-bold text-lg hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-500/20"
+            >
+              Unlock App
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex flex-col md:flex-row text-slate-900">
@@ -225,7 +302,7 @@ const App: React.FC = () => {
             { icon: <Calendar />, label: 'Bills', id: 'Bills' as const },
             { icon: <Target />, label: 'Goals', id: 'Goals' as const },
             { icon: <RefreshCw />, label: 'Recurring', id: 'Recurring' as const },
-            { icon: <Database />, label: 'Backup', id: 'Backup' as const },
+            { icon: <Database />, label: 'Settings', id: 'Settings' as const },
           ].map((item) => (
             <button 
               key={item.id}
@@ -240,10 +317,17 @@ const App: React.FC = () => {
 
         <div className="hidden lg:block w-full px-6 mt-auto">
           <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 text-slate-600">
-            <h3 className="text-xs font-bold uppercase tracking-widest mb-1">Financial Health</h3>
-            <p className="text-[10px] opacity-70 mb-3">Maintain a 20% savings rate for long-term growth.</p>
-            <div className="w-full bg-slate-200 h-1 rounded-full overflow-hidden">
-               <div className="bg-indigo-600 h-full w-2/3"></div>
+            <h3 className="text-xs font-bold uppercase tracking-widest mb-1">Security Status</h3>
+            <div className="flex items-center space-x-2 mt-2">
+              {pin ? (
+                <div className="flex items-center text-emerald-600 text-[10px] font-bold">
+                  <Lock className="w-3 h-3 mr-1" /> PROTECTED
+                </div>
+              ) : (
+                <div className="flex items-center text-amber-500 text-[10px] font-bold">
+                  <AlertCircle className="w-3 h-3 mr-1" /> UNPROTECTED
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -270,9 +354,7 @@ const App: React.FC = () => {
 
         {activeTab === 'Dashboard' && (
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-            {/* Left Column - Accounts & Main Transactions */}
             <div className="lg:col-span-8 space-y-8">
-              {/* Top Stats */}
               <section className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
                   <p className="text-sm font-medium text-slate-500 mb-1">Total Net Worth</p>
@@ -290,7 +372,6 @@ const App: React.FC = () => {
                 </div>
               </section>
 
-              {/* Account Selector */}
               <section>
                 <div className="flex items-center justify-between mb-4">
                   <h2 className="text-lg font-bold text-slate-800">My Accounts</h2>
@@ -303,16 +384,13 @@ const App: React.FC = () => {
                 </div>
               </section>
 
-              {/* Recent Transactions */}
               <section>
                 <h2 className="text-lg font-bold text-slate-800 mb-4">Recent Transactions</h2>
                 <TransactionList transactions={filteredTransactions} accounts={accounts} />
               </section>
             </div>
 
-            {/* Right Column - Analysis & Goals */}
             <div className="lg:col-span-4 space-y-8">
-              {/* Budget Progress */}
               <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
                 <h2 className="text-lg font-bold text-slate-800 mb-4 flex items-center">
                   <PieIcon className="w-5 h-5 mr-2 text-indigo-500" /> Budget Goals
@@ -325,17 +403,13 @@ const App: React.FC = () => {
                         <span className="text-slate-500">${goal.spent.toFixed(0)} / ${goal.monthlyLimit}</span>
                       </div>
                       <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
-                        <div 
-                          className={`h-full transition-all duration-500 ${goal.percent > 90 ? 'bg-red-500' : 'bg-indigo-600'}`} 
-                          style={{ width: `${goal.percent}%` }}
-                        ></div>
+                        <div className={`h-full transition-all duration-500 ${goal.percent > 90 ? 'bg-red-500' : 'bg-indigo-600'}`} style={{ width: `${goal.percent}%` }}></div>
                       </div>
                     </div>
                   ))}
                 </div>
               </div>
 
-              {/* Savings Goals */}
               <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
                 <h2 className="text-lg font-bold text-slate-800 mb-4 flex items-center">
                   <Target className="w-5 h-5 mr-2 text-emerald-500" /> Savings Goals
@@ -371,7 +445,6 @@ const App: React.FC = () => {
                 <span>{bills.filter(b => !b.isPaid).length} Pending Bills</span>
               </div>
             </div>
-            
             <div className="grid gap-4">
               {bills.map(bill => (
                 <div key={bill.id} className="bg-white p-5 rounded-2xl border border-slate-200 flex items-center justify-between">
@@ -390,9 +463,6 @@ const App: React.FC = () => {
                   <div className="flex items-center space-x-6">
                     <div className="text-right">
                       <p className="text-lg font-bold text-slate-900">${bill.amount.toFixed(2)}</p>
-                      <p className={`text-[10px] uppercase font-bold ${bill.isPaid ? 'text-green-500' : 'text-amber-500'}`}>
-                        {bill.isPaid ? 'Paid' : 'Upcoming'}
-                      </p>
                     </div>
                     {!bill.isPaid && (
                       <button 
@@ -424,19 +494,12 @@ const App: React.FC = () => {
                       <span className={`text-sm font-bold ${goal.percent > 90 ? 'text-red-500' : 'text-indigo-600'}`}>{goal.percent.toFixed(0)}%</span>
                     </div>
                     <div className="w-full bg-slate-100 h-3 rounded-full overflow-hidden">
-                      <div 
-                        className={`h-full transition-all duration-700 ${goal.percent > 90 ? 'bg-red-500' : 'bg-indigo-600'}`}
-                        style={{ width: `${goal.percent}%` }}
-                      ></div>
+                      <div className={`h-full transition-all duration-700 ${goal.percent > 90 ? 'bg-red-500' : 'bg-indigo-600'}`} style={{ width: `${goal.percent}%` }}></div>
                     </div>
                   </div>
                 ))}
-                <button className="w-full py-3 border-2 border-dashed border-slate-200 rounded-xl text-slate-400 text-sm font-bold hover:border-indigo-300 hover:text-indigo-500 transition-all">
-                  + Add New Category Goal
-                </button>
               </div>
             </div>
-
             <div className="space-y-6">
               <h2 className="text-xl font-bold text-slate-800">Savings Goals</h2>
               <div className="space-y-4">
@@ -449,18 +512,8 @@ const App: React.FC = () => {
                       </div>
                       <Target className="w-6 h-6 text-slate-300" />
                     </div>
-                    <div className="mb-4">
-                      <div className="flex justify-between text-xs mb-1 font-bold text-slate-600">
-                        <span>${sg.currentAmount.toLocaleString()} saved</span>
-                        <span>{((sg.currentAmount / sg.targetAmount) * 100).toFixed(0)}%</span>
-                      </div>
-                      <div className="w-full bg-slate-100 h-3 rounded-full overflow-hidden">
-                        <div className={`h-full ${sg.color}`} style={{ width: `${(sg.currentAmount / sg.targetAmount) * 100}%` }}></div>
-                      </div>
-                    </div>
-                    <div className="flex items-center justify-between pt-2 border-t border-slate-50">
-                      <span className="text-xs text-slate-400">Deadline: {sg.deadline}</span>
-                      <button className="text-xs font-bold text-indigo-600 hover:underline">Add Funds</button>
+                    <div className="w-full bg-slate-100 h-3 rounded-full overflow-hidden">
+                      <div className={`h-full ${sg.color}`} style={{ width: `${(sg.currentAmount / sg.targetAmount) * 100}%` }}></div>
                     </div>
                   </div>
                 ))}
@@ -471,35 +524,27 @@ const App: React.FC = () => {
 
         {activeTab === 'Recurring' && (
           <div className="max-w-4xl mx-auto space-y-6">
-            <div className="flex items-center justify-between">
+             <div className="flex items-center justify-between">
               <h2 className="text-xl font-bold text-slate-800">Recurring Transactions</h2>
               <button className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-bold flex items-center space-x-2">
                 <Plus className="w-4 h-4" />
                 <span>New Auto-Payment</span>
               </button>
             </div>
-
             <div className="grid gap-4">
               {recurring.map(rec => (
-                <div key={rec.id} className="bg-white p-5 rounded-2xl border border-slate-200 flex items-center justify-between group">
-                  <div className="flex items-center space-x-4">
-                    <div className="p-3 bg-indigo-50 text-indigo-600 rounded-xl group-hover:bg-indigo-600 group-hover:text-white transition-colors">
+                <div key={rec.id} className="bg-white p-5 rounded-2xl border border-slate-200 flex items-center justify-between">
+                   <div className="flex items-center space-x-4">
+                    <div className="p-3 bg-indigo-50 text-indigo-600 rounded-xl">
                       <RefreshCw className="w-6 h-6" />
                     </div>
                     <div>
                       <h3 className="font-bold text-slate-800">{rec.description}</h3>
-                      <div className="flex items-center space-x-3 text-xs text-slate-500 mt-1">
-                        <span className="flex items-center"><Clock className="w-3 h-3 mr-1" /> {rec.frequency}</span>
-                        <span className="px-2 py-0.5 bg-slate-100 rounded-full">Next: {rec.nextDate}</span>
-                      </div>
+                      <p className="text-xs text-slate-500">{rec.frequency} • Next: {rec.nextDate}</p>
                     </div>
                   </div>
                   <div className="text-right">
                     <p className="text-lg font-bold text-slate-900">${rec.amount.toFixed(2)}</p>
-                    <div className="flex items-center justify-end space-x-2 mt-1">
-                      <div className={`w-2 h-2 rounded-full ${rec.active ? 'bg-green-500' : 'bg-slate-300'}`}></div>
-                      <span className="text-[10px] font-bold uppercase text-slate-400">{rec.active ? 'Active' : 'Paused'}</span>
-                    </div>
                   </div>
                 </div>
               ))}
@@ -507,57 +552,90 @@ const App: React.FC = () => {
           </div>
         )}
 
-        {activeTab === 'Backup' && (
-          <div className="max-w-2xl mx-auto space-y-8">
-            <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm text-center">
-              <div className="w-16 h-16 bg-indigo-100 text-indigo-600 rounded-2xl flex items-center justify-center mx-auto mb-6">
-                <Database className="w-8 h-8" />
+        {activeTab === 'Settings' && (
+          <div className="max-w-4xl mx-auto space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Security PIN Section */}
+              <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm flex flex-col justify-between">
+                <div>
+                  <div className="w-12 h-12 bg-amber-50 text-amber-600 rounded-xl flex items-center justify-center mb-4">
+                    <Key className="w-6 h-6" />
+                  </div>
+                  <h2 className="text-xl font-bold text-slate-800 mb-2">Security PIN</h2>
+                  <p className="text-slate-500 mb-6 text-sm leading-relaxed">
+                    Protect your sensitive financial information with a 4-digit PIN required on app launch.
+                  </p>
+                </div>
+                <div className="flex flex-col space-y-3">
+                  <button 
+                    onClick={handleSetPin}
+                    className="flex items-center justify-center space-x-2 py-3 px-6 bg-slate-900 text-white rounded-xl font-bold hover:bg-slate-800 transition-all"
+                  >
+                    {pin ? <Unlock className="w-4 h-4" /> : <Lock className="w-4 h-4" />}
+                    <span>{pin ? 'Change Security PIN' : 'Enable Security PIN'}</span>
+                  </button>
+                  {pin && (
+                    <button 
+                      onClick={() => setIsLocked(true)}
+                      className="text-sm font-bold text-indigo-600 hover:text-indigo-700 transition-colors"
+                    >
+                      Lock App Now
+                    </button>
+                  )}
+                </div>
               </div>
-              <h2 className="text-2xl font-bold text-slate-800 mb-2">Backup & Recovery</h2>
-              <p className="text-slate-500 mb-8">
-                Protect your financial records. Export your data to a JSON file for safekeeping, 
-                or restore your information if you switch browsers or devices.
-              </p>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <button 
-                  onClick={exportData}
-                  className="flex items-center justify-center space-x-3 p-4 bg-indigo-600 text-white rounded-2xl font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100"
-                >
-                  <Download className="w-5 h-5" />
-                  <span>Backup to JSON</span>
-                </button>
-                <button 
-                  onClick={handleImportClick}
-                  className="flex items-center justify-center space-x-3 p-4 bg-white border-2 border-slate-200 text-slate-700 rounded-2xl font-bold hover:bg-slate-50 transition-all"
-                >
-                  <Upload className="w-5 h-5" />
-                  <span>Restore from JSON</span>
-                </button>
+
+              {/* Data Portability Section */}
+              <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm flex flex-col justify-between">
+                <div>
+                  <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center mb-4">
+                    <Database className="w-6 h-6" />
+                  </div>
+                  <h2 className="text-xl font-bold text-slate-800 mb-2">Data Portability</h2>
+                  <p className="text-slate-500 mb-6 text-sm leading-relaxed">
+                    Export your entire database (including PIN) to a JSON file or restore from a previous backup.
+                  </p>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <button 
+                    onClick={exportData}
+                    className="flex items-center justify-center space-x-2 p-3 bg-indigo-50 text-indigo-700 rounded-xl font-bold hover:bg-indigo-100 transition-all border border-indigo-100"
+                  >
+                    <Download className="w-4 h-4" />
+                    <span>Export</span>
+                  </button>
+                  <button 
+                    onClick={handleImportClick}
+                    className="flex items-center justify-center space-x-2 p-3 bg-white border border-slate-200 text-slate-700 rounded-xl font-bold hover:bg-slate-50 transition-all"
+                  >
+                    <Upload className="w-4 h-4" />
+                    <span>Import</span>
+                  </button>
+                </div>
               </div>
             </div>
 
-            <div className="bg-red-50 p-6 rounded-3xl border border-red-100">
-               <div className="flex items-center space-x-3 mb-4 text-red-600">
-                 <AlertCircle className="w-5 h-5" />
-                 <h3 className="font-bold">Danger Zone</h3>
+            {/* Danger Zone */}
+            <div className="bg-red-50 p-6 rounded-3xl border border-red-100 mt-2">
+               <div className="flex items-center space-x-3 mb-2 text-red-600">
+                 <Trash2 className="w-5 h-5" />
+                 <h3 className="text-lg font-bold">Clear All Data</h3>
                </div>
-               <p className="text-sm text-red-700 mb-4 opacity-80">
-                 Resetting your data will remove all transactions, accounts, and goals, reverting the app to its initial state. This action is permanent.
+               <p className="text-sm text-red-700 mb-4 opacity-80 max-w-lg">
+                 This action is permanent and will delete every single piece of information, including your transactions, account balances, and security settings.
                </p>
                <button 
                  onClick={resetToDefaults}
-                 className="flex items-center space-x-2 text-red-600 font-bold text-sm hover:bg-red-100 px-4 py-2 rounded-xl transition-colors"
+                 className="flex items-center space-x-2 bg-red-600 text-white font-bold text-sm px-6 py-3 rounded-xl hover:bg-red-700 transition-all shadow-md shadow-red-200"
                >
                  <Trash2 className="w-4 h-4" />
-                 <span>Reset All Data</span>
+                 <span>Permanently Delete All Information</span>
                </button>
             </div>
           </div>
         )}
       </main>
 
-      {/* Modals */}
       <AddTransactionModal 
         isOpen={isModalOpen} 
         onClose={() => setIsModalOpen(false)} 
