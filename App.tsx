@@ -46,14 +46,15 @@ import AddTransactionModal from './components/AddTransactionModal';
 type AppTab = 'Dashboard' | 'Bills' | 'Goals' | 'Recurring' | 'Settings';
 
 const App: React.FC = () => {
+  // Load PIN from localStorage immediately
+  const [pin, setPin] = useState<string | null>(() => localStorage.getItem('ws_pin'));
   const [accounts, setAccounts] = useState<Account[]>(INITIAL_ACCOUNTS);
   const [transactions, setTransactions] = useState<Transaction[]>(INITIAL_TRANSACTIONS);
   const [bills, setBills] = useState<Bill[]>(INITIAL_BILLS);
   const [recurring, setRecurring] = useState<RecurringTransaction[]>(INITIAL_RECURRING);
   const [categoryGoals, setCategoryGoals] = useState<CategoryGoal[]>(INITIAL_CATEGORY_GOALS);
   const [savingsGoals, setSavingsGoals] = useState<SavingsGoal[]>(INITIAL_SAVINGS_GOALS);
-  const [pin, setPin] = useState<string | null>(null);
-  const [isLocked, setIsLocked] = useState<boolean>(false);
+  const [isLocked, setIsLocked] = useState<boolean>(!!pin);
   const [unlockInput, setUnlockInput] = useState<string>('');
   
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
@@ -62,17 +63,7 @@ const App: React.FC = () => {
   
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Load initial lock state from localStorage or initial state
-  useEffect(() => {
-    // Only lock if a PIN exists and it's the initial load
-    const storedPin = localStorage.getItem('ws_pin');
-    if (storedPin) {
-      setPin(storedPin);
-      setIsLocked(true);
-    }
-  }, []);
-
-  // Update persistence whenever pin changes
+  // Persistence effect for PIN
   useEffect(() => {
     if (pin) {
       localStorage.setItem('ws_pin', pin);
@@ -89,16 +80,6 @@ const App: React.FC = () => {
     if (!selectedAccountId) return transactions;
     return transactions.filter(t => t.accountId === selectedAccountId);
   }, [transactions, selectedAccountId]);
-
-  const spendingByCategory = useMemo(() => {
-    const data: Record<string, number> = {};
-    transactions
-      .filter(t => t.type === 'Expense')
-      .forEach(t => {
-        data[t.category] = (data[t.category] || 0) + t.amount;
-      });
-    return Object.entries(data).map(([name, value]) => ({ name, value }));
-  }, [transactions]);
 
   const budgetProgress = useMemo(() => {
     return categoryGoals.map(goal => {
@@ -219,19 +200,18 @@ const App: React.FC = () => {
   };
 
   const handleSetPin = () => {
-    const newPin = prompt("Enter new 4-digit numeric PIN (or leave empty to disable):");
-    if (newPin === null) return;
-    if (newPin === "") {
+    const newPinInput = window.prompt("Enter new 4-digit numeric PIN (or leave empty to disable):");
+    if (newPinInput === null) return;
+    
+    if (newPinInput === "") {
       setPin(null);
       setIsLocked(false);
       alert("Security PIN disabled.");
-    } else if (/^\d{4}$/.test(newPin)) {
-      setPin(newPin);
-      // We don't lock immediately to allow user to continue settings.
-      // They can lock manually or it will lock on next session.
-      alert("Security PIN updated successfully. Your app is now protected.");
+    } else if (/^\d{4}$/.test(newPinInput)) {
+      setPin(newPinInput);
+      alert("Security PIN updated successfully. Your data is now secure.");
     } else {
-      alert("PIN must be exactly 4 digits.");
+      alert("PIN must be exactly 4 numeric digits (e.g., 1234).");
     }
   };
 
@@ -279,13 +259,7 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen flex flex-col md:flex-row text-slate-900">
-      <input 
-        type="file" 
-        ref={fileInputRef} 
-        onChange={importData} 
-        accept=".json" 
-        className="hidden" 
-      />
+      <input type="file" ref={fileInputRef} onChange={importData} accept=".json" className="hidden" />
 
       {/* Sidebar Navigation */}
       <aside className="w-full md:w-20 lg:w-64 bg-white border-r border-slate-200 md:h-screen flex flex-col items-center py-8 sticky top-0 z-40">
@@ -335,7 +309,6 @@ const App: React.FC = () => {
 
       {/* Main Content Area */}
       <main className="flex-1 bg-slate-50 overflow-y-auto px-4 md:px-8 py-8">
-        {/* Header */}
         <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
           <div>
             <h1 className="text-2xl font-bold text-slate-800">{activeTab}</h1>
@@ -454,97 +427,14 @@ const App: React.FC = () => {
                     </div>
                     <div>
                       <h3 className="font-bold text-slate-800">{bill.name}</h3>
-                      <div className="flex items-center space-x-3 text-xs text-slate-500 mt-1">
-                        <span>Due: {bill.dueDate}</span>
-                        <span className="px-2 py-0.5 bg-slate-100 rounded-full">{bill.category}</span>
-                      </div>
+                      <p className="text-xs text-slate-500 mt-1">Due: {bill.dueDate} • {bill.category}</p>
                     </div>
                   </div>
                   <div className="flex items-center space-x-6">
-                    <div className="text-right">
-                      <p className="text-lg font-bold text-slate-900">${bill.amount.toFixed(2)}</p>
-                    </div>
+                    <p className="text-lg font-bold text-slate-900">${bill.amount.toFixed(2)}</p>
                     {!bill.isPaid && (
-                      <button 
-                        onClick={() => handleMarkBillPaid(bill)}
-                        className="px-4 py-2 bg-slate-900 text-white rounded-lg text-sm font-bold hover:bg-slate-800 transition-colors"
-                      >
-                        Mark as Paid
-                      </button>
+                      <button onClick={() => handleMarkBillPaid(bill)} className="px-4 py-2 bg-slate-900 text-white rounded-lg text-sm font-bold hover:bg-slate-800">Mark as Paid</button>
                     )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {activeTab === 'Goals' && (
-          <div className="max-w-4xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-8">
-            <div className="space-y-6">
-              <h2 className="text-xl font-bold text-slate-800">Monthly Budgets</h2>
-              <div className="bg-white p-6 rounded-2xl border border-slate-200 space-y-6">
-                {budgetProgress.map((goal, idx) => (
-                  <div key={idx}>
-                    <div className="flex justify-between items-end mb-2">
-                      <div>
-                        <h4 className="font-bold text-slate-800">{goal.category}</h4>
-                        <p className="text-xs text-slate-500">Spent ${goal.spent.toFixed(2)} of ${goal.monthlyLimit}</p>
-                      </div>
-                      <span className={`text-sm font-bold ${goal.percent > 90 ? 'text-red-500' : 'text-indigo-600'}`}>{goal.percent.toFixed(0)}%</span>
-                    </div>
-                    <div className="w-full bg-slate-100 h-3 rounded-full overflow-hidden">
-                      <div className={`h-full transition-all duration-700 ${goal.percent > 90 ? 'bg-red-500' : 'bg-indigo-600'}`} style={{ width: `${goal.percent}%` }}></div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div className="space-y-6">
-              <h2 className="text-xl font-bold text-slate-800">Savings Goals</h2>
-              <div className="space-y-4">
-                {savingsGoals.map(sg => (
-                  <div key={sg.id} className="bg-white p-6 rounded-2xl border border-slate-200">
-                    <div className="flex justify-between mb-4">
-                      <div>
-                        <h3 className="font-bold text-slate-800">{sg.name}</h3>
-                        <p className="text-xs text-slate-500">Target: ${sg.targetAmount.toLocaleString()}</p>
-                      </div>
-                      <Target className="w-6 h-6 text-slate-300" />
-                    </div>
-                    <div className="w-full bg-slate-100 h-3 rounded-full overflow-hidden">
-                      <div className={`h-full ${sg.color}`} style={{ width: `${(sg.currentAmount / sg.targetAmount) * 100}%` }}></div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {activeTab === 'Recurring' && (
-          <div className="max-w-4xl mx-auto space-y-6">
-             <div className="flex items-center justify-between">
-              <h2 className="text-xl font-bold text-slate-800">Recurring Transactions</h2>
-              <button className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-bold flex items-center space-x-2">
-                <Plus className="w-4 h-4" />
-                <span>New Auto-Payment</span>
-              </button>
-            </div>
-            <div className="grid gap-4">
-              {recurring.map(rec => (
-                <div key={rec.id} className="bg-white p-5 rounded-2xl border border-slate-200 flex items-center justify-between">
-                   <div className="flex items-center space-x-4">
-                    <div className="p-3 bg-indigo-50 text-indigo-600 rounded-xl">
-                      <RefreshCw className="w-6 h-6" />
-                    </div>
-                    <div>
-                      <h3 className="font-bold text-slate-800">{rec.description}</h3>
-                      <p className="text-xs text-slate-500">{rec.frequency} • Next: {rec.nextDate}</p>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-lg font-bold text-slate-900">${rec.amount.toFixed(2)}</p>
                   </div>
                 </div>
               ))}
@@ -562,25 +452,20 @@ const App: React.FC = () => {
                     <Key className="w-6 h-6" />
                   </div>
                   <h2 className="text-xl font-bold text-slate-800 mb-2">Security PIN</h2>
-                  <p className="text-slate-500 mb-6 text-sm leading-relaxed">
+                  <p className="text-slate-500 mb-4 text-sm leading-relaxed">
                     Protect your sensitive financial information with a 4-digit PIN required on app launch.
                   </p>
                 </div>
                 <div className="flex flex-col space-y-3">
                   <button 
                     onClick={handleSetPin}
-                    className="flex items-center justify-center space-x-2 py-3 px-6 bg-slate-900 text-white rounded-xl font-bold hover:bg-slate-800 transition-all"
+                    className="flex items-center justify-center space-x-2 py-3 px-6 bg-slate-900 text-white rounded-xl font-bold hover:bg-slate-800 transition-all active:scale-95"
                   >
                     {pin ? <Unlock className="w-4 h-4" /> : <Lock className="w-4 h-4" />}
                     <span>{pin ? 'Change Security PIN' : 'Enable Security PIN'}</span>
                   </button>
                   {pin && (
-                    <button 
-                      onClick={() => setIsLocked(true)}
-                      className="text-sm font-bold text-indigo-600 hover:text-indigo-700 transition-colors"
-                    >
-                      Lock App Now
-                    </button>
+                    <button onClick={() => setIsLocked(true)} className="text-sm font-bold text-indigo-600 hover:text-indigo-700">Lock App Now</button>
                   )}
                 </div>
               </div>
@@ -592,22 +477,16 @@ const App: React.FC = () => {
                     <Database className="w-6 h-6" />
                   </div>
                   <h2 className="text-xl font-bold text-slate-800 mb-2">Data Portability</h2>
-                  <p className="text-slate-500 mb-6 text-sm leading-relaxed">
+                  <p className="text-slate-500 mb-4 text-sm leading-relaxed">
                     Export your entire database (including PIN) to a JSON file or restore from a previous backup.
                   </p>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
-                  <button 
-                    onClick={exportData}
-                    className="flex items-center justify-center space-x-2 p-3 bg-indigo-50 text-indigo-700 rounded-xl font-bold hover:bg-indigo-100 transition-all border border-indigo-100"
-                  >
+                  <button onClick={exportData} className="flex items-center justify-center space-x-2 p-3 bg-indigo-50 text-indigo-700 rounded-xl font-bold hover:bg-indigo-100 border border-indigo-100">
                     <Download className="w-4 h-4" />
                     <span>Export</span>
                   </button>
-                  <button 
-                    onClick={handleImportClick}
-                    className="flex items-center justify-center space-x-2 p-3 bg-white border border-slate-200 text-slate-700 rounded-xl font-bold hover:bg-slate-50 transition-all"
-                  >
+                  <button onClick={handleImportClick} className="flex items-center justify-center space-x-2 p-3 bg-white border border-slate-200 text-slate-700 rounded-xl font-bold hover:bg-slate-50">
                     <Upload className="w-4 h-4" />
                     <span>Import</span>
                   </button>
@@ -615,14 +494,14 @@ const App: React.FC = () => {
               </div>
             </div>
 
-            {/* Danger Zone */}
-            <div className="bg-red-50 p-6 rounded-3xl border border-red-100 mt-2">
+            {/* Danger Zone - Tightened Gap */}
+            <div className="bg-red-50 p-6 rounded-3xl border border-red-100">
                <div className="flex items-center space-x-3 mb-2 text-red-600">
                  <Trash2 className="w-5 h-5" />
                  <h3 className="text-lg font-bold">Clear All Data</h3>
                </div>
                <p className="text-sm text-red-700 mb-4 opacity-80 max-w-lg">
-                 This action is permanent and will delete every single piece of information, including your transactions, account balances, and security settings.
+                 This action is permanent and will delete every single piece of information, including your transactions and security settings.
                </p>
                <button 
                  onClick={resetToDefaults}
@@ -636,12 +515,7 @@ const App: React.FC = () => {
         )}
       </main>
 
-      <AddTransactionModal 
-        isOpen={isModalOpen} 
-        onClose={() => setIsModalOpen(false)} 
-        accounts={accounts}
-        onAdd={handleAddTransaction}
-      />
+      <AddTransactionModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} accounts={accounts} onAdd={handleAddTransaction} />
     </div>
   );
 };
