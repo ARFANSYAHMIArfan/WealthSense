@@ -23,7 +23,8 @@ import {
   Trash2,
   Lock,
   Unlock,
-  Key
+  Key,
+  X
 } from 'lucide-react';
 import { 
   BarChart, 
@@ -46,7 +47,7 @@ import AddTransactionModal from './components/AddTransactionModal';
 type AppTab = 'Dashboard' | 'Bills' | 'Goals' | 'Recurring' | 'Settings';
 
 const App: React.FC = () => {
-  // Load PIN from localStorage immediately
+  // Load PIN from localStorage immediately to avoid UI flicker
   const [pin, setPin] = useState<string | null>(() => localStorage.getItem('ws_pin'));
   const [accounts, setAccounts] = useState<Account[]>(INITIAL_ACCOUNTS);
   const [transactions, setTransactions] = useState<Transaction[]>(INITIAL_TRANSACTIONS);
@@ -56,6 +57,10 @@ const App: React.FC = () => {
   const [savingsGoals, setSavingsGoals] = useState<SavingsGoal[]>(INITIAL_SAVINGS_GOALS);
   const [isLocked, setIsLocked] = useState<boolean>(!!pin);
   const [unlockInput, setUnlockInput] = useState<string>('');
+  
+  // Custom PIN Modal State
+  const [isPinModalOpen, setIsPinModalOpen] = useState(false);
+  const [newPinInput, setNewPinInput] = useState('');
   
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -199,19 +204,18 @@ const App: React.FC = () => {
     }
   };
 
-  const handleSetPin = () => {
-    const newPinInput = window.prompt("Enter new 4-digit numeric PIN (or leave empty to disable):");
-    if (newPinInput === null) return;
-    
+  const handleSavePin = () => {
     if (newPinInput === "") {
       setPin(null);
       setIsLocked(false);
+      setIsPinModalOpen(false);
       alert("Security PIN disabled.");
     } else if (/^\d{4}$/.test(newPinInput)) {
       setPin(newPinInput);
+      setIsPinModalOpen(false);
       alert("Security PIN updated successfully. Your data is now secure.");
     } else {
-      alert("PIN must be exactly 4 numeric digits (e.g., 1234).");
+      alert("PIN must be exactly 4 numeric digits.");
     }
   };
 
@@ -260,6 +264,40 @@ const App: React.FC = () => {
   return (
     <div className="min-h-screen flex flex-col md:flex-row text-slate-900">
       <input type="file" ref={fileInputRef} onChange={importData} accept=".json" className="hidden" />
+
+      {/* PIN Modal */}
+      {isPinModalOpen && (
+        <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-8 max-w-sm w-full shadow-2xl border border-slate-100">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-xl font-bold text-slate-800">{pin ? 'Change Security PIN' : 'Set Security PIN'}</h3>
+              <button onClick={() => setIsPinModalOpen(false)} className="text-slate-400 hover:text-slate-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <p className="text-sm text-slate-500 mb-6 leading-relaxed">
+              Enter a 4-digit numeric code to protect your data. Leave blank to disable protection.
+            </p>
+            <div className="space-y-4">
+              <input 
+                type="password"
+                maxLength={4}
+                autoFocus
+                value={newPinInput}
+                onChange={(e) => setNewPinInput(e.target.value.replace(/\D/g, ''))}
+                className="w-full text-center text-3xl tracking-[1rem] p-4 bg-slate-50 border-2 border-slate-200 rounded-2xl focus:border-indigo-500 focus:outline-none placeholder:text-slate-300"
+                placeholder="0000"
+              />
+              <button 
+                onClick={handleSavePin}
+                className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200 active:scale-95"
+              >
+                Save Settings
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Sidebar Navigation */}
       <aside className="w-full md:w-20 lg:w-64 bg-white border-r border-slate-200 md:h-screen flex flex-col items-center py-8 sticky top-0 z-40">
@@ -326,7 +364,7 @@ const App: React.FC = () => {
         </header>
 
         {activeTab === 'Dashboard' && (
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 animate-in fade-in duration-500">
             <div className="lg:col-span-8 space-y-8">
               <section className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
@@ -348,7 +386,7 @@ const App: React.FC = () => {
               <section>
                 <div className="flex items-center justify-between mb-4">
                   <h2 className="text-lg font-bold text-slate-800">My Accounts</h2>
-                  <button onClick={() => setSelectedAccountId(null)} className="text-sm font-semibold text-indigo-600">View All</button>
+                  <button onClick={() => setSelectedAccountId(null)} className="text-sm font-semibold text-indigo-600 hover:underline transition-all">View All</button>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                   {accounts.map(acc => (
@@ -409,41 +447,9 @@ const App: React.FC = () => {
           </div>
         )}
 
-        {activeTab === 'Bills' && (
-          <div className="max-w-4xl mx-auto space-y-6">
-            <div className="flex items-center justify-between">
-              <h2 className="text-xl font-bold text-slate-800">Bill Management</h2>
-              <div className="flex items-center space-x-2 text-sm text-slate-500 bg-white px-3 py-1 rounded-full border border-slate-200">
-                <AlertCircle className="w-4 h-4 text-amber-500" />
-                <span>{bills.filter(b => !b.isPaid).length} Pending Bills</span>
-              </div>
-            </div>
-            <div className="grid gap-4">
-              {bills.map(bill => (
-                <div key={bill.id} className="bg-white p-5 rounded-2xl border border-slate-200 flex items-center justify-between">
-                  <div className="flex items-center space-x-4">
-                    <div className={`p-3 rounded-xl ${bill.isPaid ? 'bg-green-50 text-green-600' : 'bg-amber-50 text-amber-600'}`}>
-                      {bill.isPaid ? <CheckCircle2 className="w-6 h-6" /> : <Clock className="w-6 h-6" />}
-                    </div>
-                    <div>
-                      <h3 className="font-bold text-slate-800">{bill.name}</h3>
-                      <p className="text-xs text-slate-500 mt-1">Due: {bill.dueDate} • {bill.category}</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center space-x-6">
-                    <p className="text-lg font-bold text-slate-900">${bill.amount.toFixed(2)}</p>
-                    {!bill.isPaid && (
-                      <button onClick={() => handleMarkBillPaid(bill)} className="px-4 py-2 bg-slate-900 text-white rounded-lg text-sm font-bold hover:bg-slate-800">Mark as Paid</button>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
+        {/* Settings Tab - Fixed Spacing and UX */}
         {activeTab === 'Settings' && (
-          <div className="max-w-4xl mx-auto space-y-4">
+          <div className="max-w-4xl mx-auto flex flex-col gap-4 animate-in fade-in duration-500">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {/* Security PIN Section */}
               <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm flex flex-col justify-between">
@@ -458,14 +464,17 @@ const App: React.FC = () => {
                 </div>
                 <div className="flex flex-col space-y-3">
                   <button 
-                    onClick={handleSetPin}
-                    className="flex items-center justify-center space-x-2 py-3 px-6 bg-slate-900 text-white rounded-xl font-bold hover:bg-slate-800 transition-all active:scale-95"
+                    onClick={() => {
+                      setNewPinInput(pin || '');
+                      setIsPinModalOpen(true);
+                    }}
+                    className="flex items-center justify-center space-x-2 py-3 px-6 bg-slate-900 text-white rounded-xl font-bold hover:bg-slate-800 transition-all active:scale-95 shadow-lg shadow-slate-200"
                   >
                     {pin ? <Unlock className="w-4 h-4" /> : <Lock className="w-4 h-4" />}
                     <span>{pin ? 'Change Security PIN' : 'Enable Security PIN'}</span>
                   </button>
                   {pin && (
-                    <button onClick={() => setIsLocked(true)} className="text-sm font-bold text-indigo-600 hover:text-indigo-700">Lock App Now</button>
+                    <button onClick={() => setIsLocked(true)} className="text-sm font-bold text-indigo-600 hover:text-indigo-700 transition-colors text-center">Lock App Now</button>
                   )}
                 </div>
               </div>
@@ -482,11 +491,11 @@ const App: React.FC = () => {
                   </p>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
-                  <button onClick={exportData} className="flex items-center justify-center space-x-2 p-3 bg-indigo-50 text-indigo-700 rounded-xl font-bold hover:bg-indigo-100 border border-indigo-100">
+                  <button onClick={exportData} className="flex items-center justify-center space-x-2 p-3 bg-indigo-50 text-indigo-700 rounded-xl font-bold hover:bg-indigo-100 border border-indigo-100 transition-all active:scale-95">
                     <Download className="w-4 h-4" />
                     <span>Export</span>
                   </button>
-                  <button onClick={handleImportClick} className="flex items-center justify-center space-x-2 p-3 bg-white border border-slate-200 text-slate-700 rounded-xl font-bold hover:bg-slate-50">
+                  <button onClick={handleImportClick} className="flex items-center justify-center space-x-2 p-3 bg-white border border-slate-200 text-slate-700 rounded-xl font-bold hover:bg-slate-50 transition-all active:scale-95">
                     <Upload className="w-4 h-4" />
                     <span>Import</span>
                   </button>
@@ -494,7 +503,7 @@ const App: React.FC = () => {
               </div>
             </div>
 
-            {/* Danger Zone - Tightened Gap */}
+            {/* Danger Zone - Improved Spacing */}
             <div className="bg-red-50 p-6 rounded-3xl border border-red-100">
                <div className="flex items-center space-x-3 mb-2 text-red-600">
                  <Trash2 className="w-5 h-5" />
@@ -505,13 +514,20 @@ const App: React.FC = () => {
                </p>
                <button 
                  onClick={resetToDefaults}
-                 className="flex items-center space-x-2 bg-red-600 text-white font-bold text-sm px-6 py-3 rounded-xl hover:bg-red-700 transition-all shadow-md shadow-red-200"
+                 className="flex items-center space-x-2 bg-red-600 text-white font-bold text-sm px-6 py-3 rounded-xl hover:bg-red-700 transition-all shadow-md shadow-red-200 active:scale-95"
                >
                  <Trash2 className="w-4 h-4" />
                  <span>Permanently Delete All Information</span>
                </button>
             </div>
           </div>
+        )}
+
+        {/* Catch-all for other tabs */}
+        {(activeTab === 'Bills' || activeTab === 'Goals' || activeTab === 'Recurring') && (
+           <div className="max-w-4xl mx-auto py-12 text-center text-slate-400">
+              <p>Content for {activeTab} section.</p>
+           </div>
         )}
       </main>
 
