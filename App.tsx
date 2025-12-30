@@ -29,7 +29,8 @@ import {
   PlusCircle,
   FileJson,
   ShieldCheck,
-  FileUp
+  FileUp,
+  Menu
 } from 'lucide-react';
 import { 
   BarChart, 
@@ -69,6 +70,9 @@ const App: React.FC = () => {
   const [savingsGoals, setSavingsGoals] = useState<SavingsGoal[]>(INITIAL_SAVINGS_GOALS);
   const [isLocked, setIsLocked] = useState<boolean>(!!pin);
   const [unlockInput, setUnlockInput] = useState<string>('');
+  
+  // Sidebar State
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   
   // Modals
   const [isPinModalOpen, setIsPinModalOpen] = useState(false);
@@ -215,7 +219,7 @@ const App: React.FC = () => {
       recurring,
       bills,
       categoryGoals,
-      pin // Include PIN in backup if user wants to restore exactly as is
+      pin 
     };
 
     const blob = new Blob([JSON.stringify(dataToExport, null, 2)], { type: 'application/json' });
@@ -259,7 +263,6 @@ const App: React.FC = () => {
         const content = event.target?.result as string;
         const importedData = JSON.parse(content);
 
-        // Basic validation
         if (!importedData.accounts || !importedData.transactions) {
           throw new Error("Invalid backup file format.");
         }
@@ -273,7 +276,7 @@ const App: React.FC = () => {
           
           if (importedData.pin) {
             setPin(importedData.pin);
-            setIsLocked(false); // User is already in the app, don't lock immediately
+            setIsLocked(false);
           }
           
           alert("Data restored successfully!");
@@ -285,7 +288,6 @@ const App: React.FC = () => {
       }
     };
     reader.readAsText(file);
-    // Reset file input so same file can be chosen again
     e.target.value = '';
   };
 
@@ -325,8 +327,7 @@ const App: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen flex flex-col md:flex-row text-slate-900">
-      {/* Hidden file input for restore functionality */}
+    <div className="min-h-screen bg-slate-50 flex flex-col md:flex-row text-slate-900">
       <input 
         type="file" 
         ref={fileInputRef} 
@@ -335,165 +336,88 @@ const App: React.FC = () => {
         className="hidden" 
       />
 
-      {/* Export Verification Modal */}
-      {isExportAuthOpen && (
-        <div className="fixed inset-0 z-[110] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl p-8 max-sm w-full shadow-2xl border border-slate-100 text-center">
-            <div className="flex justify-between items-center mb-6">
-              <h3 className="text-xl font-bold text-slate-800">Verify Export</h3>
-              <button onClick={() => setIsExportAuthOpen(false)} className="text-slate-400 hover:text-slate-600">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <div className="w-16 h-16 bg-amber-50 rounded-2xl flex items-center justify-center mx-auto mb-4 text-amber-600">
-              <ShieldCheck className="w-8 h-8" />
-            </div>
-            <p className="text-slate-600 mb-6">Enter your PIN to export your financial data.</p>
-            <form onSubmit={handleExportVerify} className="space-y-4">
-              <input 
-                type="password"
-                maxLength={6}
-                autoFocus
-                value={exportAuthPin}
-                onChange={(e) => setExportAuthPin(e.target.value.replace(/\D/g, ''))}
-                className="w-full text-center text-3xl tracking-[0.8rem] p-4 bg-slate-50 border-2 border-slate-200 rounded-2xl focus:border-indigo-500 focus:outline-none"
-                placeholder="••••••"
-              />
-              <button 
-                type="submit"
-                className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-bold hover:bg-indigo-700 transition-all"
-              >
-                Confirm Export
-              </button>
-            </form>
-          </div>
-        </div>
+      {/* Sidebar Overlay */}
+      {isSidebarOpen && (
+        <div 
+          className="fixed inset-0 bg-slate-900/40 backdrop-blur-[2px] z-[50] lg:hidden"
+          onClick={() => setIsSidebarOpen(false)}
+        />
       )}
 
-      {/* PIN Modal */}
-      {isPinModalOpen && (
-        <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl p-8 max-w-sm w-full shadow-2xl border border-slate-100">
-            <div className="flex justify-between items-center mb-6">
-              <h3 className="text-xl font-bold text-slate-800">{pin ? 'Update Security PIN' : 'Set Security PIN'}</h3>
-              <button onClick={() => setIsPinModalOpen(false)} className="text-slate-400 hover:text-slate-600">
-                <X className="w-5 h-5" />
-              </button>
+      {/* Pull-out Sidebar Navigation */}
+      <aside className={`
+        fixed inset-y-0 left-0 z-[60] w-72 bg-white border-r border-slate-200 transform transition-transform duration-300 ease-in-out lg:translate-x-0 lg:static lg:block
+        ${isSidebarOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full lg:translate-x-0'}
+      `}>
+        <div className="h-full flex flex-col py-8">
+          <div className="flex items-center justify-between px-6 mb-12">
+            <div className="flex items-center space-x-2">
+              <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white">
+                <Activity className="w-6 h-6" />
+              </div>
+              <span className="text-xl font-bold tracking-tight">WealthSense</span>
             </div>
-            <p className="text-sm text-slate-500 mb-6 text-center">Your PIN must be 6 digits to enhance your account security.</p>
-            <div className="space-y-4">
-              <input 
-                type="password"
-                maxLength={6}
-                autoFocus
-                value={newPinInput}
-                onChange={(e) => setNewPinInput(e.target.value.replace(/\D/g, ''))}
-                className="w-full text-center text-3xl tracking-[0.8rem] p-4 bg-slate-50 border-2 border-slate-200 rounded-2xl focus:border-indigo-500 focus:outline-none"
-                placeholder="000000"
-              />
-              <button 
-                onClick={handleSavePin}
-                className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-bold hover:bg-indigo-700 transition-all active:scale-[0.98]"
-              >
-                Save Securely
-              </button>
-              {pin && (
-                <button 
-                  onClick={() => { setPin(null); setIsPinModalOpen(false); }}
-                  className="w-full py-2 text-red-600 font-semibold hover:bg-red-50 rounded-xl transition-colors"
-                >
-                  Remove PIN
-                </button>
-              )}
-            </div>
+            <button 
+              onClick={() => setIsSidebarOpen(false)}
+              className="p-2 hover:bg-slate-100 rounded-full lg:hidden text-slate-500"
+            >
+              <X className="w-5 h-5" />
+            </button>
           </div>
-        </div>
-      )}
 
-      {/* Account List / Management Drawer */}
-      {isAccountListViewOpen && (
-        <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-sm flex justify-end">
-          <div className="bg-white w-full max-w-md h-full shadow-2xl overflow-y-auto animate-in slide-in-from-right">
-            <div className="p-6 border-b border-slate-100 flex justify-between items-center sticky top-0 bg-white z-10">
-              <h2 className="text-xl font-bold text-slate-800">Account Management</h2>
-              <button onClick={() => setIsAccountListViewOpen(false)} className="p-2 hover:bg-slate-100 rounded-full">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <div className="p-6 space-y-4">
+          <nav className="flex-1 w-full space-y-2 px-4">
+            {[
+              { icon: <Wallet />, label: 'Dashboard', id: 'Dashboard' as const },
+              { icon: <Calendar />, label: 'Bills', id: 'Bills' as const },
+              { icon: <Target />, label: 'Goals', id: 'Goals' as const },
+              { icon: <RefreshCw />, label: 'Recurring', id: 'Recurring' as const },
+              { icon: <Database />, label: 'Settings', id: 'Settings' as const },
+            ].map((item) => (
               <button 
+                key={item.id}
                 onClick={() => {
-                  setEditingAccount(null);
-                  setIsAccountModalOpen(true);
+                  setActiveTab(item.id);
+                  setIsSidebarOpen(false);
                 }}
-                className="w-full py-4 border-2 border-dashed border-indigo-200 text-indigo-600 rounded-2xl flex items-center justify-center space-x-2 font-bold hover:bg-indigo-50 transition-colors"
+                className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-all ${activeTab === item.id ? 'bg-indigo-50 text-indigo-600' : 'text-slate-500 hover:bg-slate-50 hover:pl-6'}`}
               >
-                <PlusCircle className="w-5 h-5" />
-                <span>Add New Account</span>
+                <span className="w-6 h-6">{item.icon}</span>
+                <span className="font-semibold">{item.label}</span>
               </button>
-              
-              <div className="space-y-4">
-                {accounts.map(acc => (
-                  <div key={acc.id} className="relative">
-                     <AccountCard 
-                      account={acc} 
-                      isSelected={false} 
-                      onClick={() => {}} 
-                      onEdit={(e) => handleEditAccountClick(e, acc)} 
-                    />
-                  </div>
-                ))}
-                {accounts.length === 0 && (
-                  <div className="text-center py-12 text-slate-400">
-                    No accounts yet. Create one to get started.
-                  </div>
-                )}
+            ))}
+          </nav>
+          
+          <div className="px-6 mt-auto">
+            <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
+              <p className="text-xs font-bold text-slate-400 uppercase mb-2">Security Status</p>
+              <div className="flex items-center space-x-2 text-emerald-600">
+                <ShieldCheck className="w-4 h-4" />
+                <span className="text-xs font-semibold">Encrypted Storage</span>
               </div>
             </div>
           </div>
         </div>
-      )}
-
-      {/* Sidebar Navigation */}
-      <aside className="w-full md:w-20 lg:w-64 bg-white border-r border-slate-200 md:h-screen flex flex-col items-center py-8 sticky top-0 z-40">
-        <div className="flex items-center space-x-2 px-6 mb-12">
-          <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white">
-            <Activity className="w-6 h-6" />
-          </div>
-          <span className="text-xl font-bold hidden lg:block tracking-tight">WealthSense</span>
-        </div>
-
-        <nav className="flex-1 w-full space-y-2 px-4">
-          {[
-            { icon: <Wallet />, label: 'Dashboard', id: 'Dashboard' as const },
-            { icon: <Calendar />, label: 'Bills', id: 'Bills' as const },
-            { icon: <Target />, label: 'Goals', id: 'Goals' as const },
-            { icon: <RefreshCw />, label: 'Recurring', id: 'Recurring' as const },
-            { icon: <Database />, label: 'Settings', id: 'Settings' as const },
-          ].map((item) => (
-            <button 
-              key={item.id}
-              onClick={() => setActiveTab(item.id)}
-              className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-colors ${activeTab === item.id ? 'bg-indigo-50 text-indigo-600' : 'text-slate-500 hover:bg-slate-50'}`}
-            >
-              <span className="w-6 h-6">{item.icon}</span>
-              <span className="font-semibold hidden lg:block">{item.label}</span>
-            </button>
-          ))}
-        </nav>
       </aside>
 
       {/* Main Content Area */}
-      <main className="flex-1 bg-slate-50 overflow-y-auto px-4 md:px-8 py-8">
+      <main className="flex-1 overflow-y-auto px-4 md:px-8 py-8">
         <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
-          <div>
-            <h1 className="text-2xl font-bold text-slate-800">{activeTab}</h1>
-            <p className="text-slate-500">Manage your wealth smarter.</p>
+          <div className="flex items-center space-x-4">
+            <button 
+              onClick={() => setIsSidebarOpen(true)}
+              className="lg:hidden p-2 bg-white border border-slate-200 rounded-xl text-slate-600 hover:bg-slate-50 shadow-sm"
+            >
+              <Menu className="w-6 h-6" />
+            </button>
+            <div>
+              <h1 className="text-2xl font-bold text-slate-800">{activeTab}</h1>
+              <p className="text-slate-500 text-sm">Manage your wealth smarter.</p>
+            </div>
           </div>
           <div className="flex items-center space-x-4">
             <button 
               onClick={() => setIsModalOpen(true)}
-              className="px-4 py-2 bg-indigo-600 text-white rounded-lg flex items-center space-x-2 hover:bg-indigo-700 transition-colors shadow-lg active:scale-95"
+              className="px-4 py-2 bg-indigo-600 text-white rounded-xl flex items-center space-x-2 hover:bg-indigo-700 transition-colors shadow-lg active:scale-95"
             >
               <Plus className="w-4 h-4" />
               <span className="font-semibold text-sm">Add Transaction</span>
@@ -587,7 +511,6 @@ const App: React.FC = () => {
         {activeTab === 'Settings' && (
           <div className="max-w-4xl mx-auto space-y-6 animate-in fade-in">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Security PIN Section */}
               <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow">
                 <div>
                   <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center mb-4">
@@ -604,7 +527,6 @@ const App: React.FC = () => {
                 </button>
               </div>
 
-              {/* Data Export Section */}
               <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow">
                 <div>
                   <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center mb-4">
@@ -622,7 +544,6 @@ const App: React.FC = () => {
                 </button>
               </div>
 
-              {/* Data Restore Section */}
               <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow">
                 <div>
                   <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center mb-4">
@@ -640,7 +561,6 @@ const App: React.FC = () => {
                 </button>
               </div>
               
-              {/* Reset Section */}
               <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow">
                 <div>
                   <div className="w-12 h-12 bg-red-50 text-red-600 rounded-xl flex items-center justify-center mb-4">
@@ -682,6 +602,123 @@ const App: React.FC = () => {
            </div>
         )}
       </main>
+
+      {/* Verification Modals */}
+      {isExportAuthOpen && (
+        <div className="fixed inset-0 z-[110] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-8 max-w-sm w-full shadow-2xl border border-slate-100 text-center">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-xl font-bold text-slate-800">Verify Export</h3>
+              <button onClick={() => setIsExportAuthOpen(false)} className="text-slate-400 hover:text-slate-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="w-16 h-16 bg-amber-50 rounded-2xl flex items-center justify-center mx-auto mb-4 text-amber-600">
+              <ShieldCheck className="w-8 h-8" />
+            </div>
+            <p className="text-slate-600 mb-6">Enter your PIN to export your financial data.</p>
+            <form onSubmit={handleExportVerify} className="space-y-4">
+              <input 
+                type="password"
+                maxLength={6}
+                autoFocus
+                value={exportAuthPin}
+                onChange={(e) => setExportAuthPin(e.target.value.replace(/\D/g, ''))}
+                className="w-full text-center text-3xl tracking-[0.8rem] p-4 bg-slate-50 border-2 border-slate-200 rounded-2xl focus:border-indigo-500 focus:outline-none"
+                placeholder="••••••"
+              />
+              <button 
+                type="submit"
+                className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-bold hover:bg-indigo-700 transition-all"
+              >
+                Confirm Export
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {isPinModalOpen && (
+        <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-8 max-w-sm w-full shadow-2xl border border-slate-100">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-xl font-bold text-slate-800">{pin ? 'Update Security PIN' : 'Set Security PIN'}</h3>
+              <button onClick={() => setIsPinModalOpen(false)} className="text-slate-400 hover:text-slate-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <p className="text-sm text-slate-500 mb-6 text-center">Your PIN must be 6 digits to enhance your account security.</p>
+            <div className="space-y-4">
+              <input 
+                type="password"
+                maxLength={6}
+                autoFocus
+                value={newPinInput}
+                onChange={(e) => setNewPinInput(e.target.value.replace(/\D/g, ''))}
+                className="w-full text-center text-3xl tracking-[0.8rem] p-4 bg-slate-50 border-2 border-slate-200 rounded-2xl focus:border-indigo-500 focus:outline-none"
+                placeholder="000000"
+              />
+              <button 
+                onClick={handleSavePin}
+                className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-bold hover:bg-indigo-700 transition-all active:scale-[0.98]"
+              >
+                Save Securely
+              </button>
+              {pin && (
+                <button 
+                  onClick={() => { setPin(null); setIsPinModalOpen(false); }}
+                  className="w-full py-2 text-red-600 font-semibold hover:bg-red-50 rounded-xl transition-colors"
+                >
+                  Remove PIN
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isAccountListViewOpen && (
+        <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-sm flex justify-end">
+          <div className="bg-white w-full max-w-md h-full shadow-2xl overflow-y-auto animate-in slide-in-from-right">
+            <div className="p-6 border-b border-slate-100 flex justify-between items-center sticky top-0 bg-white z-10">
+              <h2 className="text-xl font-bold text-slate-800">Account Management</h2>
+              <button onClick={() => setIsAccountListViewOpen(false)} className="p-2 hover:bg-slate-100 rounded-full">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <button 
+                onClick={() => {
+                  setEditingAccount(null);
+                  setIsAccountModalOpen(true);
+                }}
+                className="w-full py-4 border-2 border-dashed border-indigo-200 text-indigo-600 rounded-2xl flex items-center justify-center space-x-2 font-bold hover:bg-indigo-50 transition-colors"
+              >
+                <PlusCircle className="w-5 h-5" />
+                <span>Add New Account</span>
+              </button>
+              
+              <div className="space-y-4">
+                {accounts.map(acc => (
+                  <div key={acc.id} className="relative">
+                     <AccountCard 
+                      account={acc} 
+                      isSelected={false} 
+                      onClick={() => {}} 
+                      onEdit={(e) => handleEditAccountClick(e, acc)} 
+                    />
+                  </div>
+                ))}
+                {accounts.length === 0 && (
+                  <div className="text-center py-12 text-slate-400">
+                    No accounts yet. Create one to get started.
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       <AddTransactionModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} accounts={accounts} onAdd={handleAddTransaction} />
       
