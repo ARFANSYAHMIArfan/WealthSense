@@ -24,9 +24,9 @@ export const generateFinancialStatement = async (
     Transactions:
     ${JSON.stringify(transactionsContext, null, 2)}
     
-    Current Net Worth: $${accounts.reduce((acc, a) => acc + a.balance, 0).toFixed(2)}
+    Current Net Worth: RM${accounts.reduce((acc, a) => acc + a.balance, 0).toFixed(2)}
     
-    Keep the response professional, encouraging, and easy to read. Use Markdown for formatting.
+    Keep the response professional, encouraging, and easy to read. Use Markdown for formatting. Use RM (Ringgit Malaysia) for all monetary values.
   `;
 
   try {

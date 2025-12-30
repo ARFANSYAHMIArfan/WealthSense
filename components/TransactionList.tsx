@@ -37,7 +37,7 @@ const TransactionList: React.FC<Props> = ({ transactions, accounts }) => {
               </div>
               <div className="text-right">
                 <p className={`font-bold text-lg ${isExpense ? 'text-slate-900' : 'text-green-600'}`}>
-                  {isExpense ? '-' : '+'}${Math.abs(tx.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                  {isExpense ? '-' : '+'}RM{Math.abs(tx.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                 </p>
                 <p className="text-[10px] text-slate-400 uppercase font-medium">Completed</p>
               </div>

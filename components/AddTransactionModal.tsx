@@ -92,7 +92,7 @@ const AddTransactionModal: React.FC<Props> = ({ accounts, isOpen, onClose, onAdd
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-600 mb-1">Amount ($)</label>
+            <label className="block text-sm font-medium text-slate-600 mb-1">Amount (RM)</label>
             <input
               type="number"
               required
@@ -149,7 +149,7 @@ const AddTransactionModal: React.FC<Props> = ({ accounts, isOpen, onClose, onAdd
               className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none"
             >
               {accounts.map(acc => (
-                <option key={acc.id} value={acc.id}>{acc.name} (${acc.balance.toFixed(2)})</option>
+                <option key={acc.id} value={acc.id}>{acc.name} (RM{acc.balance.toFixed(2)})</option>
               ))}
             </select>
           </div>

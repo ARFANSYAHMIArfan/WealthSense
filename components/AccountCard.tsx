@@ -1,15 +1,16 @@
 
 import React from 'react';
 import { Account } from '../types';
-import { CreditCard, Wallet, Landmark } from 'lucide-react';
+import { CreditCard, Wallet, Landmark, Edit2 } from 'lucide-react';
 
 interface Props {
   account: Account;
   isSelected: boolean;
   onClick: () => void;
+  onEdit: (e: React.MouseEvent) => void;
 }
 
-const AccountCard: React.FC<Props> = ({ account, isSelected, onClick }) => {
+const AccountCard: React.FC<Props> = ({ account, isSelected, onClick, onEdit }) => {
   const getIcon = () => {
     switch (account.type) {
       case 'Credit': return <CreditCard className="w-6 h-6" />;
@@ -29,21 +30,34 @@ const AccountCard: React.FC<Props> = ({ account, isSelected, onClick }) => {
       
       <div className="flex justify-between items-start mb-8 relative z-10">
         <div>
-          <p className="text-xs uppercase tracking-widest opacity-80">{account.type}</p>
+          <p className="text-xs uppercase tracking-widest opacity-80">
+            {account.bankName ? `${account.bankName} • ${account.type}` : account.type}
+          </p>
           <h3 className="text-xl font-bold">{account.name}</h3>
         </div>
-        {getIcon()}
+        <div className="flex items-center space-x-2">
+          <button 
+            onClick={onEdit}
+            className="p-1.5 bg-white/20 hover:bg-white/40 rounded-lg transition-colors"
+          >
+            <Edit2 className="w-4 h-4 text-white" />
+          </button>
+          {getIcon()}
+        </div>
       </div>
 
       <div className="mb-6 relative z-10">
         <p className="text-sm opacity-80 mb-1">Available Balance</p>
         <p className="text-2xl font-mono font-bold">
-          ${account.balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          RM{account.balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
         </p>
       </div>
 
       <div className="flex justify-between items-end relative z-10">
-        <p className="text-sm font-mono tracking-widest">{account.cardNumber}</p>
+        <div className="flex flex-col">
+          {account.accountNumber && <p className="text-[10px] opacity-70">Acc: {account.accountNumber}</p>}
+          <p className="text-sm font-mono tracking-widest">{account.cardNumber}</p>
+        </div>
         <div className="text-right">
           <p className="text-[10px] uppercase opacity-70">Expiry</p>
           <p className="text-xs font-bold">{account.expiry}</p>

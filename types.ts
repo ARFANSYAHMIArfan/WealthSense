@@ -8,6 +8,8 @@ export interface Account {
   balance: number;
   color: string;
   cardNumber: string;
+  accountNumber: string;
+  bankName: string;
   expiry: string;
   provider: 'Visa' | 'Mastercard' | 'Amex';
 }
