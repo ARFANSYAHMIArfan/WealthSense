@@ -95,7 +95,7 @@ const App: React.FC = () => {
         setTimeout(() => {
            setSyncStatus('synced');
            setLastSyncError(null);
-        }, 3000);
+        }, 4000);
       }
     });
 
@@ -132,7 +132,7 @@ const App: React.FC = () => {
     const key = (document.getElementById('sKey') as HTMLInputElement).value;
     localStorage.setItem('ws_supabase_url', url.trim());
     localStorage.setItem('ws_supabase_key', key.trim());
-    alert("Supabase settings saved! Reloading to establish connection...");
+    alert("Supabase settings saved! The app will now use this Sync Engine.");
     window.location.reload();
   };
 
@@ -200,13 +200,9 @@ const App: React.FC = () => {
     }
   };
 
-  const handleUnlock = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (unlockInput === pin) { setIsLocked(false); setUnlockInput(''); } 
-    else { alert("Incorrect PIN"); setUnlockInput(''); }
-  };
+  const SQL_SNIPPET = `-- IMPORTANT: "id" MUST BE THE PRIMARY KEY
+-- If you get "Duplicate Key on accountId", you likely set accountId as the Primary Key by mistake.
 
-  const SQL_SNIPPET = `-- 1. Accounts Table
 create table accounts (
   id text primary key, 
   name text, 
@@ -220,7 +216,6 @@ create table accounts (
   provider text
 );
 
--- 2. Transactions Table (WARNING: id MUST be the primary key, NOT accountId)
 create table transactions (
   id text primary key, 
   date text, 
@@ -232,7 +227,6 @@ create table transactions (
   "isRecurring" boolean
 );
 
--- 3. Goals Table
 create table goals (
   id text primary key, 
   name text, 
@@ -275,12 +269,12 @@ create table goals (
                 <div className="flex items-center justify-between mb-2">
                    <div className="flex items-center space-x-2">
                       <div className={`w-2 h-2 rounded-full ${syncStatus === 'syncing' ? 'bg-indigo-500 animate-ping' : (syncStatus === 'error' ? 'bg-rose-500' : 'bg-emerald-500')}`} />
-                      <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Cloud Engine</span>
+                      <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Supabase Sync</span>
                    </div>
                    {cloudConfig.isActive ? <Cloud className={`w-4 h-4 ${syncStatus === 'error' ? 'text-rose-600' : 'text-emerald-600'}`} /> : <CloudOff className="w-4 h-4 text-slate-400" />}
                 </div>
                 <p className={`text-[11px] font-bold truncate ${syncStatus === 'error' ? 'text-rose-700' : 'text-slate-700'}`}>
-                   {syncStatus === 'syncing' ? 'Pushing Data...' : (syncStatus === 'error' ? (lastSyncError || 'Sync Failed') : (cloudConfig.isActive ? 'Real-time Active' : 'Offline Vault'))}
+                   {syncStatus === 'syncing' ? 'Pushing Data...' : (syncStatus === 'error' ? (lastSyncError || 'Sync Failed') : (cloudConfig.isActive ? 'Real-time Active' : 'Local Only'))}
                 </p>
                 {healthInfo?.latency && <p className="text-[9px] text-slate-400 font-mono mt-1">Latency: {healthInfo.latency}ms</p>}
              </div>
@@ -474,7 +468,10 @@ create table goals (
                     <div className="flex-1 overflow-hidden">
                        <p className="text-xs font-black uppercase tracking-widest text-rose-400 mb-1">Last Sync Failure</p>
                        <p className="text-sm font-bold text-rose-700 break-words">{lastSyncError}</p>
-                       <p className="text-[10px] text-rose-500 mt-2 font-medium">Tip: If you see "Duplicate Key", check your SQL Schema in Supabase to ensure "accountId" is not a primary key.</p>
+                       <div className="mt-3 p-4 bg-white/50 border border-rose-100 rounded-2xl">
+                          <p className="text-[10px] font-black text-rose-800 uppercase tracking-widest mb-1">Troubleshooting Tip</p>
+                          <p className="text-xs text-rose-600 font-medium">If you see <b>"Duplicate Key"</b>, it means your Supabase table for <b>transactions</b> has "accountId" set as the Primary Key by mistake. Update your table to use "id" as the Primary Key.</p>
+                       </div>
                     </div>
                  </div>
                )}
@@ -516,7 +513,7 @@ create table goals (
                     </button>
                     <button onClick={() => setShowSetupGuide(!showSetupGuide)} className="px-8 py-5 bg-white border border-slate-200 text-slate-600 rounded-[2rem] font-black text-sm hover:bg-slate-50 transition-all flex items-center justify-center space-x-2">
                       <Info className="w-5 h-5" />
-                      <span>SQL Schema Guide</span>
+                      <span>SQL Setup Script</span>
                     </button>
                   </div>
                </div>
@@ -524,7 +521,7 @@ create table goals (
                {showSetupGuide && (
                  <div className="mt-10 p-8 bg-slate-50 rounded-[2.5rem] border border-slate-100 animate-slide-in">
                     <h4 className="text-lg font-black mb-6 flex items-center"><Terminal className="w-5 h-5 mr-3 text-indigo-600" /> Database Setup Script</h4>
-                    <p className="text-xs font-bold text-rose-500 mb-4 flex items-center"><AlertCircle className="w-4 h-4 mr-2" /> Ensure "id" is the primary key for all tables. Do not make "accountId" unique in transactions.</p>
+                    <p className="text-xs font-bold text-rose-500 mb-4 flex items-center"><AlertCircle className="w-4 h-4 mr-2" /> Ensure "id" is the ONLY primary key for all tables. Do not set "accountId" as unique.</p>
                     <div className="relative group">
                        <div className="absolute top-4 right-4 flex items-center space-x-2">
                           <button onClick={() => { navigator.clipboard.writeText(SQL_SNIPPET); alert('SQL Copied!'); }} className="p-2 bg-white/10 hover:bg-white/20 rounded-lg text-indigo-200 transition-colors">
@@ -569,7 +566,7 @@ create table goals (
                 <RefreshCw className="w-5 h-5 animate-spin text-indigo-400" />
                 <div>
                    <p className="text-sm font-black">Syncing Vault</p>
-                   <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Saving to Cloud...</p>
+                   <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Pushing to Supabase...</p>
                 </div>
              </div>
           </div>
@@ -580,7 +577,7 @@ create table goals (
               <div className="bg-rose-600 text-white px-8 py-5 rounded-[2rem] shadow-2xl flex items-center space-x-4 border border-white/20">
                  <AlertCircle className="w-5 h-5" />
                  <div>
-                    <p className="text-sm font-black">Cloud Error</p>
+                    <p className="text-sm font-black">Cloud Sync Failure</p>
                     <p className="text-[10px] font-bold text-rose-100 uppercase tracking-widest truncate max-w-[200px]">{lastSyncError}</p>
                  </div>
               </div>

@@ -57,21 +57,17 @@ export const subscribeToSync = (callback: (status: SyncStatus, error?: string) =
 const formatError = (error: any): string => {
   if (typeof error === 'string') return error;
   if (error?.message) {
-    return `${error.message}${error.details ? ': ' + error.details : ''}`;
+    let msg = error.message;
+    if (error.details) msg += ` - ${error.details}`;
+    if (error.hint) msg += ` (${error.hint})`;
+    return msg;
   }
   return JSON.stringify(error);
 };
 
 const createCollection = (name: string) => ({
   find: async () => {
-    if (supabase) {
-      try {
-        const { data, error } = await supabase.from(name).select('*');
-        if (!error && data) return data;
-      } catch (e) {
-        console.warn(`Supabase ${name} unavailable.`);
-      }
-    }
+    // We prioritize local data for speed, but could fetch from cloud here
     return getLocal(name);
   },
   insertOne: async (doc: any) => {
@@ -85,7 +81,7 @@ const createCollection = (name: string) => ({
         const { error } = await supabase.from(name).insert([doc]);
         if (error) {
           const msg = formatError(error);
-          console.error(`Supabase Error (${name}):`, error);
+          console.error(`Supabase Sync Error (${name}):`, error);
           onSyncChange('error', msg);
         } else {
           onSyncChange('synced');
