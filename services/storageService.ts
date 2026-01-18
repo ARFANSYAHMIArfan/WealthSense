@@ -1,17 +1,14 @@
 
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { createClient, SupabaseClient, User } from '@supabase/supabase-js';
 
-const SUPABASE_URL = localStorage.getItem('ws_supabase_url');
-const SUPABASE_KEY = localStorage.getItem('ws_supabase_key');
+// Provided credentials
+const DEFAULT_URL = 'https://nizvotgebfvbptfkqlfi.supabase.co';
+const DEFAULT_KEY = 'sb_publishable_5xoCICkhjoN-CxxfjVzP1Q_wdX_t12z';
 
-let supabase: SupabaseClient | null = null;
-if (SUPABASE_URL && SUPABASE_KEY && SUPABASE_URL.startsWith('http')) {
-  try {
-    supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
-  } catch (e) {
-    console.error("Supabase failed to initialize", e);
-  }
-}
+const SUPABASE_URL = localStorage.getItem('ws_supabase_url') || DEFAULT_URL;
+const SUPABASE_KEY = localStorage.getItem('ws_supabase_key') || DEFAULT_KEY;
+
+export const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 export type SyncStatus = 'synced' | 'syncing' | 'error' | 'offline';
 
@@ -22,20 +19,44 @@ export const getCloudConfig = () => ({
 });
 
 /**
- * Performs a deep health check on the Supabase connection
+ * Authentication Service
+ */
+export const auth = {
+  signUp: async (email: string, pass: string) => {
+    return await supabase.auth.signUp({ email, password: pass });
+  },
+  signIn: async (email: string, pass: string) => {
+    return await supabase.auth.signInWithPassword({ email, password: pass });
+  },
+  signOut: async () => {
+    await supabase.auth.signOut();
+    localStorage.removeItem('ws_vault_accounts');
+    localStorage.removeItem('ws_vault_transactions');
+    localStorage.removeItem('ws_vault_goals');
+  },
+  getUser: async () => {
+    const { data } = await supabase.auth.getUser();
+    return data.user;
+  },
+  onAuthStateChange: (callback: (user: User | null) => void) => {
+    return supabase.auth.onAuthStateChange((_event, session) => {
+      callback(session?.user ?? null);
+    });
+  }
+};
+
+/**
+ * Connection Health Check
  */
 export const testConnection = async (): Promise<{ ok: boolean; message: string; latency?: number }> => {
-  if (!supabase) return { ok: false, message: 'Supabase not configured.' };
-  
   const start = performance.now();
   try {
     const { error } = await supabase.from('accounts').select('id').limit(1);
     const end = performance.now();
-    
-    if (error) throw error;
-    return { ok: true, message: 'Connection healthy.', latency: Math.round(end - start) };
+    if (error && error.code !== 'PGRST116') throw error; 
+    return { ok: true, message: 'Cloud link established.', latency: Math.round(end - start) };
   } catch (err: any) {
-    return { ok: false, message: err.message || 'Unknown database error.' };
+    return { ok: false, message: err.message || 'Check your Supabase URL/Key.' };
   }
 };
 
@@ -56,18 +77,19 @@ export const subscribeToSync = (callback: (status: SyncStatus, error?: string) =
 
 const formatError = (error: any): string => {
   if (typeof error === 'string') return error;
-  if (error?.message) {
-    let msg = error.message;
-    if (error.details) msg += ` - ${error.details}`;
-    if (error.hint) msg += ` (${error.hint})`;
-    return msg;
-  }
-  return JSON.stringify(error);
+  return error?.message || JSON.stringify(error);
 };
 
 const createCollection = (name: string) => ({
   find: async () => {
-    // We prioritize local data for speed, but could fetch from cloud here
+    const { data: user } = await supabase.auth.getUser();
+    if (user.user) {
+      const { data, error } = await supabase.from(name).select('*');
+      if (!error && data) {
+        setLocal(name, data);
+        return data;
+      }
+    }
     return getLocal(name);
   },
   insertOne: async (doc: any) => {
@@ -75,14 +97,13 @@ const createCollection = (name: string) => ({
     all.push(doc);
     setLocal(name, all);
 
-    if (supabase) {
+    const { data: user } = await supabase.auth.getUser();
+    if (user.user) {
       onSyncChange('syncing');
       try {
-        const { error } = await supabase.from(name).insert([doc]);
+        const { error } = await supabase.from(name).insert([{ ...doc, user_id: user.user.id }]);
         if (error) {
-          const msg = formatError(error);
-          console.error(`Supabase Sync Error (${name}):`, error);
-          onSyncChange('error', msg);
+          onSyncChange('error', formatError(error));
         } else {
           onSyncChange('synced');
         }
@@ -100,15 +121,13 @@ const createCollection = (name: string) => ({
       setLocal(name, all);
     }
 
-    if (supabase) {
+    const { data: user } = await supabase.auth.getUser();
+    if (user.user) {
       onSyncChange('syncing');
       try {
         const { error } = await supabase.from(name).update(update).eq('id', query.id);
-        if (error) {
-          onSyncChange('error', formatError(error));
-        } else {
-          onSyncChange('synced');
-        }
+        if (error) onSyncChange('error', formatError(error));
+        else onSyncChange('synced');
       } catch (e: any) {
         onSyncChange('error', formatError(e));
       }
@@ -119,15 +138,13 @@ const createCollection = (name: string) => ({
     const filtered = all.filter(i => i.id !== query.id);
     setLocal(name, filtered);
 
-    if (supabase) {
+    const { data: user } = await supabase.auth.getUser();
+    if (user.user) {
       onSyncChange('syncing');
       try {
         const { error } = await supabase.from(name).delete().eq('id', query.id);
-        if (error) {
-          onSyncChange('error', formatError(error));
-        } else {
-          onSyncChange('synced');
-        }
+        if (error) onSyncChange('error', formatError(error));
+        else onSyncChange('synced');
       } catch (e: any) {
         onSyncChange('error', formatError(e));
       }

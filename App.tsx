@@ -33,7 +33,9 @@ import {
   WifiOff,
   History,
   Info,
-  CreditCard
+  CreditCard,
+  LogOut,
+  User as UserIcon
 } from 'lucide-react';
 import { INITIAL_ACCOUNTS, INITIAL_TRANSACTIONS, INITIAL_SAVINGS_GOALS } from './constants';
 import { Transaction, Account } from './types';
@@ -42,19 +44,21 @@ import AccountCard from './components/AccountCard';
 import AddTransactionModal from './components/AddTransactionModal';
 import AccountModal from './components/AccountModal';
 import GoalModal from './components/GoalModal';
-import { db, importVault, subscribeToSync, testConnection, SyncStatus, getCloudConfig } from './services/storageService';
+import Login from './components/Login';
+import { db, importVault, subscribeToSync, testConnection, SyncStatus, getCloudConfig, auth } from './services/storageService';
 import { getFinancialAdvice } from './services/geminiService';
+import { User } from '@supabase/supabase-js';
 
 type AppTab = 'Dashboard' | 'Vault' | 'Goals' | 'Settings';
 
 const App: React.FC = () => {
-  const [pin, setPin] = useState<string | null>(() => localStorage.getItem('ws_pin'));
+  const [user, setUser] = useState<User | null>(null);
+  const [isAuthChecking, setIsAuthChecking] = useState(true);
+
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [savingsGoals, setSavingsGoals] = useState<any[]>([]);
   
-  const [isLocked, setIsLocked] = useState<boolean>(!!pin);
-  const [unlockInput, setUnlockInput] = useState<string>('');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   
@@ -77,6 +81,24 @@ const App: React.FC = () => {
   const cloudConfig = getCloudConfig();
 
   useEffect(() => {
+    // Auth Listener
+    const { data: { subscription } } = auth.onAuthStateChange((u) => {
+      setUser(u);
+      setIsAuthChecking(false);
+    });
+
+    // Initial Auth Check
+    auth.getUser().then(u => {
+      setUser(u);
+      setIsAuthChecking(false);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    if (!user) return;
+
     const fetchData = async () => {
       const accs = await db.accounts.find();
       const txs = await db.transactions.find();
@@ -99,8 +121,8 @@ const App: React.FC = () => {
       }
     });
 
-    if (cloudConfig.isActive) runHealthCheck();
-  }, []);
+    runHealthCheck();
+  }, [user]);
 
   const runHealthCheck = async () => {
     setIsTestingConn(true);
@@ -127,13 +149,11 @@ const App: React.FC = () => {
     setIsAnalyzing(false);
   };
 
-  const handleSaveSupabase = () => {
-    const url = (document.getElementById('sUrl') as HTMLInputElement).value;
-    const key = (document.getElementById('sKey') as HTMLInputElement).value;
-    localStorage.setItem('ws_supabase_url', url.trim());
-    localStorage.setItem('ws_supabase_key', key.trim());
-    alert("Supabase settings saved! The app will now use this Sync Engine.");
-    window.location.reload();
+  const handleSignOut = async () => {
+    if (window.confirm("Sign out of WealthSense? Your local cache will be cleared for safety.")) {
+      await auth.signOut();
+      window.location.reload();
+    }
   };
 
   const exportVault = () => {
@@ -200,11 +220,12 @@ const App: React.FC = () => {
     }
   };
 
-  const SQL_SNIPPET = `-- IMPORTANT: "id" MUST BE THE PRIMARY KEY
--- If you get "Duplicate Key on accountId", you likely set accountId as the Primary Key by mistake.
+  const SQL_SNIPPET = `-- ENABLE ROW LEVEL SECURITY (RLS) IN SUPABASE
+-- FOR EACH TABLE, ADD A "user_id" COLUMN (UUID, References auth.users.id)
 
 create table accounts (
   id text primary key, 
+  user_id uuid references auth.users not null default auth.uid(),
   name text, 
   type text, 
   balance float, 
@@ -218,6 +239,7 @@ create table accounts (
 
 create table transactions (
   id text primary key, 
+  user_id uuid references auth.users not null default auth.uid(),
   date text, 
   amount float, 
   category text, 
@@ -229,6 +251,7 @@ create table transactions (
 
 create table goals (
   id text primary key, 
+  user_id uuid references auth.users not null default auth.uid(),
   name text, 
   "targetAmount" float, 
   "currentAmount" float, 
@@ -237,7 +260,23 @@ create table goals (
   color text, 
   "goalType" text, 
   priority text
-);`;
+);
+
+-- ADD RLS POLICIES:
+-- Create policy "User can only see own data" on public.accounts for select using (auth.uid() = user_id);
+-- ...Repeat for insert, update, delete on all tables.`;
+
+  if (isAuthChecking) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <RefreshCw className="w-8 h-8 text-indigo-500 animate-spin" />
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <Login />;
+  }
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] flex flex-col md:flex-row text-slate-900 font-sans selection:bg-indigo-100">
@@ -264,19 +303,35 @@ create table goals (
             ))}
           </nav>
 
-          <div className="px-6 mt-auto">
-             <div className={`p-4 rounded-2xl border transition-all ${cloudConfig.isActive ? (syncStatus === 'error' ? 'bg-rose-50 border-rose-100' : 'bg-emerald-50 border-emerald-100') : 'bg-slate-50 border-slate-100'}`}>
+          <div className="px-6 mt-auto space-y-4">
+             {/* User Profile Info */}
+             <div className="p-4 bg-slate-50 border border-slate-100 rounded-2xl flex items-center justify-between">
+                <div className="flex items-center space-x-3 truncate">
+                  <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600">
+                    <UserIcon className="w-4 h-4" />
+                  </div>
+                  <div className="truncate">
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Active User</p>
+                    <p className="text-xs font-bold text-slate-700 truncate">{user.email}</p>
+                  </div>
+                </div>
+                <button onClick={handleSignOut} className="p-2 text-slate-400 hover:text-rose-500 transition-colors">
+                  <LogOut className="w-4 h-4" />
+                </button>
+             </div>
+
+             <div className={`p-4 rounded-2xl border transition-all ${syncStatus === 'error' ? 'bg-rose-50 border-rose-100' : 'bg-emerald-50 border-emerald-100'}`}>
                 <div className="flex items-center justify-between mb-2">
                    <div className="flex items-center space-x-2">
                       <div className={`w-2 h-2 rounded-full ${syncStatus === 'syncing' ? 'bg-indigo-500 animate-ping' : (syncStatus === 'error' ? 'bg-rose-500' : 'bg-emerald-500')}`} />
-                      <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Supabase Sync</span>
+                      <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Sync Status</span>
                    </div>
-                   {cloudConfig.isActive ? <Cloud className={`w-4 h-4 ${syncStatus === 'error' ? 'text-rose-600' : 'text-emerald-600'}`} /> : <CloudOff className="w-4 h-4 text-slate-400" />}
+                   <Cloud className={`w-4 h-4 ${syncStatus === 'error' ? 'text-rose-600' : 'text-emerald-600'}`} />
                 </div>
                 <p className={`text-[11px] font-bold truncate ${syncStatus === 'error' ? 'text-rose-700' : 'text-slate-700'}`}>
-                   {syncStatus === 'syncing' ? 'Pushing Data...' : (syncStatus === 'error' ? (lastSyncError || 'Sync Failed') : (cloudConfig.isActive ? 'Real-time Active' : 'Local Only'))}
+                   {syncStatus === 'syncing' ? 'Syncing...' : (syncStatus === 'error' ? (lastSyncError || 'Sync Failed') : 'Encrypted & Active')}
                 </p>
-                {healthInfo?.latency && <p className="text-[9px] text-slate-400 font-mono mt-1">Latency: {healthInfo.latency}ms</p>}
+                {healthInfo?.latency && <p className="text-[9px] text-slate-400 font-mono mt-1">Ping: {healthInfo.latency}ms</p>}
              </div>
           </div>
         </div>
@@ -414,11 +469,12 @@ create table goals (
                   )}
                </div>
 
-               <div className={`p-8 rounded-[2.5rem] border flex flex-col items-center text-center transition-all ${cloudConfig.isActive ? 'bg-emerald-50 border-emerald-100' : 'bg-slate-50 border-slate-200/50'}`}>
-                  <div className={`w-16 h-16 rounded-2xl shadow-sm border flex items-center justify-center mb-6 transition-colors ${cloudConfig.isActive ? 'bg-white text-emerald-600 border-emerald-100' : 'bg-white text-slate-400 border-slate-100'}`}>
-                    {cloudConfig.isActive ? <Cloud className="w-8 h-8" /> : <CloudOff className="w-8 h-8" />}
+               <div className={`p-8 rounded-[2.5rem] border flex flex-col items-center text-center transition-all bg-emerald-50 border-emerald-100`}>
+                  <div className={`w-16 h-16 rounded-2xl shadow-sm border flex items-center justify-center mb-6 transition-colors bg-white text-emerald-600 border-emerald-100`}>
+                    <Cloud className="w-8 h-8" />
                   </div>
-                  <h3 className="text-lg font-black text-slate-800 mb-2">{cloudConfig.isActive ? 'Cloud Engine Active' : 'Offline Vault'}</h3>
+                  <h3 className="text-lg font-black text-slate-800 mb-2">Cloud Engine Active</h3>
+                  <p className="text-xs font-medium text-slate-500 mb-6">Real-time sync to Supabase</p>
                   <button onClick={() => setActiveTab('Settings')} className="px-6 py-3 bg-white border border-slate-200 rounded-xl text-xs font-black text-slate-800 hover:bg-white hover:shadow-md transition-all">
                     View Health Logs
                   </button>
@@ -446,20 +502,18 @@ create table goals (
                     <div className="p-4 bg-emerald-500 text-white rounded-3xl shadow-xl shadow-emerald-100"><Cloud className="w-8 h-8" /></div>
                     <div>
                       <h3 className="text-2xl font-black text-slate-800 tracking-tight">Supabase Sync Engine</h3>
-                      <p className="text-slate-500 font-medium text-sm">Configure your cloud storage environment.</p>
+                      <p className="text-slate-500 font-medium text-sm">Real-time cloud storage environment.</p>
                     </div>
                  </div>
                  
-                 {cloudConfig.isActive && (
-                   <button 
-                     onClick={runHealthCheck}
-                     disabled={isTestingConn}
-                     className={`px-6 py-3 rounded-2xl text-xs font-black flex items-center space-x-2 transition-all border ${healthInfo?.ok ? 'bg-emerald-50 text-emerald-700 border-emerald-100' : 'bg-slate-50 text-slate-600 border-slate-200'}`}
-                   >
-                     {isTestingConn ? <RefreshCw className="w-4 h-4 animate-spin" /> : (healthInfo?.ok ? <CheckCircle2 className="w-4 h-4" /> : <Activity className="w-4 h-4" />)}
-                     <span>{isTestingConn ? 'Pinging Cloud...' : (healthInfo?.ok ? 'System Healthy' : 'Test Connection')}</span>
-                   </button>
-                 )}
+                 <button 
+                   onClick={runHealthCheck}
+                   disabled={isTestingConn}
+                   className={`px-6 py-3 rounded-2xl text-xs font-black flex items-center space-x-2 transition-all border ${healthInfo?.ok ? 'bg-emerald-50 text-emerald-700 border-emerald-100' : 'bg-slate-50 text-slate-600 border-slate-200'}`}
+                 >
+                   {isTestingConn ? <RefreshCw className="w-4 h-4 animate-spin" /> : (healthInfo?.ok ? <CheckCircle2 className="w-4 h-4" /> : <Activity className="w-4 h-4" />)}
+                   <span>{isTestingConn ? 'Pinging Cloud...' : (healthInfo?.ok ? 'System Healthy' : 'Test Connection')}</span>
+                 </button>
                </div>
 
                {lastSyncError && (
@@ -468,10 +522,6 @@ create table goals (
                     <div className="flex-1 overflow-hidden">
                        <p className="text-xs font-black uppercase tracking-widest text-rose-400 mb-1">Last Sync Failure</p>
                        <p className="text-sm font-bold text-rose-700 break-words">{lastSyncError}</p>
-                       <div className="mt-3 p-4 bg-white/50 border border-rose-100 rounded-2xl">
-                          <p className="text-[10px] font-black text-rose-800 uppercase tracking-widest mb-1">Troubleshooting Tip</p>
-                          <p className="text-xs text-rose-600 font-medium">If you see <b>"Duplicate Key"</b>, it means your Supabase table for <b>transactions</b> has "accountId" set as the Primary Key by mistake. Update your table to use "id" as the Primary Key.</p>
-                       </div>
                     </div>
                  </div>
                )}
@@ -496,24 +546,24 @@ create table goals (
 
                <div className="space-y-8">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                    <div className="space-y-2">
+                    <div className="space-y-2 opacity-60">
                       <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-1">Project URL</label>
-                      <input id="sUrl" type="text" defaultValue={cloudConfig.url || ''} placeholder="https://xyz.supabase.co" className="w-full p-5 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 outline-none transition-all" />
+                      <input type="text" disabled defaultValue={cloudConfig.url || ''} className="w-full p-5 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold cursor-not-allowed" />
                     </div>
-                    <div className="space-y-2">
+                    <div className="space-y-2 opacity-60">
                       <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-1">Anon / Public API Key</label>
-                      <input id="sKey" type="password" defaultValue={cloudConfig.key || ''} placeholder="eyJhbGci..." className="w-full p-5 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 outline-none transition-all" />
+                      <input type="password" disabled defaultValue={cloudConfig.key || ''} className="w-full p-5 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold cursor-not-allowed" />
                     </div>
                   </div>
 
                   <div className="flex flex-col md:flex-row gap-4">
-                    <button onClick={handleSaveSupabase} className="flex-1 py-5 bg-slate-900 text-white rounded-[2rem] font-black text-lg shadow-2xl shadow-slate-200 hover:bg-black hover:-translate-y-1 transition-all active:scale-95 flex items-center justify-center space-x-3">
-                      <Save className="w-6 h-6" />
-                      <span>Update Configuration</span>
+                    <button onClick={handleSignOut} className="flex-1 py-5 bg-rose-600 text-white rounded-[2rem] font-black text-lg shadow-2xl shadow-rose-100 hover:bg-rose-700 hover:-translate-y-1 transition-all active:scale-95 flex items-center justify-center space-x-3">
+                      <LogOut className="w-6 h-6" />
+                      <span>Sign Out & Lock Vault</span>
                     </button>
                     <button onClick={() => setShowSetupGuide(!showSetupGuide)} className="px-8 py-5 bg-white border border-slate-200 text-slate-600 rounded-[2rem] font-black text-sm hover:bg-slate-50 transition-all flex items-center justify-center space-x-2">
                       <Info className="w-5 h-5" />
-                      <span>SQL Setup Script</span>
+                      <span>RLS & Schema Guide</span>
                     </button>
                   </div>
                </div>
@@ -521,7 +571,7 @@ create table goals (
                {showSetupGuide && (
                  <div className="mt-10 p-8 bg-slate-50 rounded-[2.5rem] border border-slate-100 animate-slide-in">
                     <h4 className="text-lg font-black mb-6 flex items-center"><Terminal className="w-5 h-5 mr-3 text-indigo-600" /> Database Setup Script</h4>
-                    <p className="text-xs font-bold text-rose-500 mb-4 flex items-center"><AlertCircle className="w-4 h-4 mr-2" /> Ensure "id" is the ONLY primary key for all tables. Do not set "accountId" as unique.</p>
+                    <p className="text-xs font-bold text-rose-500 mb-4 flex items-center"><AlertCircle className="w-4 h-4 mr-2" /> Note: Ensure you enable Row Level Security for privacy.</p>
                     <div className="relative group">
                        <div className="absolute top-4 right-4 flex items-center space-x-2">
                           <button onClick={() => { navigator.clipboard.writeText(SQL_SNIPPET); alert('SQL Copied!'); }} className="p-2 bg-white/10 hover:bg-white/20 rounded-lg text-indigo-200 transition-colors">
