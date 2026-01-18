@@ -1,21 +1,16 @@
+
 import { defineConfig } from 'vite';
 
 export default defineConfig({
-  // Define process.env so it's accessible in the browser
+  // Define process.env as an empty object string to prevent "missing name after ." errors
+  // in cases where the environment might not be fully populated during pre-bundling.
   define: {
-    'process.env': process.env
+    'process.env': '({})'
   },
   server: {
-    host: true, // Bind to 0.0.0.0 for external access
+    host: true,
     port: 5173,
     allowedHosts: ['wealthsense.onrender.com'],
-    proxy: {
-      '/api': {
-        target: 'https://wealthsense.onrender.com',
-        changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api/, ''),
-      },
-    },
   },
   build: {
     outDir: 'dist',
