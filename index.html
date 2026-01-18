@@ -28,6 +28,20 @@
     ::-webkit-scrollbar-thumb:hover {
       background: #cbd5e1;
     }
+    @keyframes slideIn {
+      from { transform: translateY(10px); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+    .animate-slide-in {
+      animation: slideIn 0.3s ease-out forwards;
+    }
+    .scale-in {
+      animation: scaleIn 0.2s ease-out forwards;
+    }
+    @keyframes scaleIn {
+      from { transform: scale(0.95); opacity: 0; }
+      to { transform: scale(1); opacity: 1; }
+    }
   </style>
 <script type="importmap">
 {
@@ -39,14 +53,15 @@
     "lucide-react": "https://esm.sh/lucide-react@^0.562.0",
     "recharts": "https://esm.sh/recharts@^3.6.0",
     "vite": "https://esm.sh/vite@^7.3.0",
-    "realm-web": "https://esm.sh/realm-web@2.0.0"
+    "@google/genai": "https://esm.sh/@google/genai@^1.37.0",
+    "@supabase/supabase-js": "https://esm.sh/@supabase/supabase-js@^2.39.7",
+    "realm-web": "https://esm.sh/realm-web@^2.0.1"
   }
 }
 </script>
 </head>
 <body>
   <div id="root"></div>
-  <!-- Entry point for the application -->
   <script type="module" src="/index.tsx"></script>
 </body>
 </html>

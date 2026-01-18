@@ -38,7 +38,10 @@ const AddTransactionModal: React.FC<Props> = ({ accounts, isOpen, onClose, onAdd
       return;
     }
 
-    const txId = `tx_${Date.now()}`;
+    // Robust ID generation to prevent collisions
+    const randomSuffix = Math.random().toString(36).substring(2, 7);
+    const txId = `tx_${Date.now()}_${randomSuffix}`;
+
     const newTx = {
       id: txId,
       amount: parsedAmount,
@@ -53,7 +56,7 @@ const AddTransactionModal: React.FC<Props> = ({ accounts, isOpen, onClose, onAdd
     let recurring = null;
     if (isRecurring) {
       recurring = {
-        id: `rec_${Date.now()}`,
+        id: `rec_${Date.now()}_${randomSuffix}`,
         description,
         amount: parsedAmount,
         category,
@@ -74,7 +77,7 @@ const AddTransactionModal: React.FC<Props> = ({ accounts, isOpen, onClose, onAdd
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
-      <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl overflow-hidden max-h-[90vh] flex flex-col scale-in-center">
+      <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl overflow-hidden max-h-[90vh] flex flex-col scale-in">
         <div className="px-6 py-5 border-b border-slate-100 flex justify-between items-center bg-white">
           <h2 className="text-xl font-bold text-slate-800">New Transaction</h2>
           <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-full text-slate-500 transition-colors">
@@ -182,7 +185,7 @@ const AddTransactionModal: React.FC<Props> = ({ accounts, isOpen, onClose, onAdd
           </div>
 
           {isRecurring && (
-            <div className="space-y-3 animate-in fade-in slide-in-from-top-2">
+            <div className="space-y-3 animate-slide-in">
               <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest">Frequency Selection</label>
               <div className="grid grid-cols-2 gap-2">
                 {['Daily', 'Weekly', 'Monthly', 'Yearly'].map((f) => (
