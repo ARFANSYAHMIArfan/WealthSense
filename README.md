@@ -1,20 +1,16 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# WealthSense
 
-# Run and deploy your AI Studio app
+## Current Setup
 
-This contains everything you need to run your app locally.
+This project now uses Supabase for authentication. Please follow the instructions below to set up Supabase.
 
-View your app in AI Studio: https://ai.studio/apps/drive/1koB6lk7ZlHyMaMxo7JqrEsKOZbMXMP6v
+### Supabase Authentication Setup
+1. Create a Supabase account at [Supabase](https://supabase.io/).
+2. Set up a new project and configure the authentication settings as needed.
+3. Ensure that your application is connected to Supabase with the correct API keys and database URL.
 
-## Run Locally
+### Important Notes
+- The reference to the previous Gemini API key has been removed for security reasons.
+- Ensure that you keep your API keys secure, especially in production environments.
 
-**Prerequisites:**  Node.js
-
-
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+If you have any questions or need further assistance, please feel free to reach out!
